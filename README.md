@@ -158,7 +158,7 @@ Add the comment `repochat-ignore` to a line you want it to skip. Exit code 1 mea
 **Run the Python tests:**
 
 ```bash
-pip install -r requirements-dev.txt
+pip install -r tests/requirements-dev.txt
 python -m pytest
 ```
 
