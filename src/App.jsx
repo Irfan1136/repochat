@@ -114,16 +114,33 @@ const RepoIcon = () => (
 
 function Logo({ size = 28 }) {
   const [bad, setBad] = useState(false)
-  if (LOGO_URL && !bad) return <img src={LOGO_URL} alt="" width={size} height={size} onError={() => setBad(true)} />
+  if (LOGO_URL && !bad) return <img className="logo" src={LOGO_URL} alt="" width={size} height={size} onError={() => setBad(true)} />
   return (
-    <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true">
-      <rect width="32" height="32" rx="8" fill="#3B82F6" />
-      <g transform="translate(16 16) scale(.8) translate(-18 -16)" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M8.5 11.5L4.5 16l4 4.5" /><path d="M13 21l2.5-10" /><path d="M18 21V11h3.4a2.7 2.7 0 010 5.4H18m3.2 0L24 21" /><path d="M27.5 11.5l4 4.5-4 4.5" /></g>
-    </svg>
+    <svg className="logo" width={size} height={size} viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="rcg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#2F6FF0"/><stop offset="1" stopColor="#5B3FE0"/></linearGradient></defs><path d="M8 1.5h16a7 7 0 0 1 7 7v9a7 7 0 0 1-7 7h-8.5L8.5 30.5V24.5H8a7 7 0 0 1-7-7v-9a7 7 0 0 1 7-7z" fill="url(#rcg)"/><g transform="translate(16 13) scale(.86) translate(-17 -13)" fill="none" stroke="#fff" strokeLinecap="round" strokeLinejoin="round"><g strokeWidth="2.5"><path d="M8.3 9.6 5.6 13l2.7 3.4"/><path d="M11.4 17.2l1.7-8.4"/><path d="M25.7 9.6 28.4 13l-2.7 3.4"/></g><path d="M16.8 18.2V7.8h2.7a2.7 2.7 0 0 1 0 5.4h-2.7m2.6 0 3 5" strokeWidth="3.3"/></g></svg>
+  )
+}
+
+// Welcome screen: the logo pops in, then slides aside as the name reveals beside it. Plays every time the site opens (skipped only for reduced motion).
+function Splash() {
+  const [on, setOn] = useState(() => !reduced())
+  useEffect(() => {
+    if (!on) return undefined
+    const t = setTimeout(() => setOn(false), 2900)
+    const k = (e) => { if (e.key === 'Escape') setOn(false) }
+    window.addEventListener('keydown', k)
+    return () => { clearTimeout(t); window.removeEventListener('keydown', k) }
+  }, [on])
+  if (!on) return null
+  return (
+    <div className="splash" onClick={() => setOn(false)} role="presentation">
+      <div className="sp-lock"><Logo size={76} /><span className="sp-name">RepoChat</span></div>
+      <p className="sp-tag">Understand any GitHub repo</p>
+    </div>
   )
 }
 
 const LINKS = [
+  { id: 'top', label: 'Home' },
   { id: 'checks-sec', label: 'Check', tool: true },
   { id: 'ask-sec', label: 'Chat', tool: true },
   { id: 'how', label: 'How it works' },
@@ -133,6 +150,30 @@ const LINKS = [
 
 function Header() {
   const [open, setOpen] = useState(false)
+  const [active, setActive] = useState('')
+  const bar = useRef(null)
+
+  // Live navbar: highlights the section you are reading, fills a progress line, and adds a shadow once you scroll.
+  useEffect(() => {
+    let raf = 0
+    const update = () => {
+      raf = 0
+      const y = window.scrollY
+      const max = document.documentElement.scrollHeight - window.innerHeight
+      bar.current?.style.setProperty('--p', max > 0 ? Math.min(1, y / max) : 0)
+      bar.current?.classList.toggle('scrolled', y > 8)
+      const here = LINKS.filter((l) => document.getElementById(l.id))
+      let cur = ''
+      for (const l of here) if (document.getElementById(l.id).getBoundingClientRect().top <= 140) cur = l.id
+      if (max > 0 && y >= max - 4 && here.length) cur = here[here.length - 1].id
+      setActive(cur)
+    }
+    const on = () => { if (!raf) raf = requestAnimationFrame(update) }
+    update()
+    window.addEventListener('scroll', on, { passive: true })
+    window.addEventListener('resize', on)
+    return () => { cancelAnimationFrame(raf); window.removeEventListener('scroll', on); window.removeEventListener('resize', on) }
+  }, [])
 
   useEffect(() => {
     if (!open) return undefined
@@ -159,12 +200,12 @@ function Header() {
       input?.focus({ preventScroll: true })
     }
   }
-  const links = LINKS.map((l, i) => <a key={l.id} href={'#' + l.id} style={{ '--i': i }} onClick={go(l)}>{l.label}</a>)
+  const links = LINKS.map((l, i) => <a key={l.id} href={'#' + l.id} style={{ '--i': i }} className={active === l.id ? 'on' : ''} aria-current={active === l.id ? 'true' : undefined} onClick={go(l)}>{l.label}</a>)
 
   return (
-    <header className="top">
+    <header className="top" ref={bar}>
       <div className="wrap row">
-        <a className="brand" href="#top"><Logo />RepoChat</a>
+        <a className="brand" href="#top"><Logo size={30} />RepoChat</a>
         <nav className="dnav" aria-label="Main">{links}</nav>
         <button className="burger" type="button" aria-label={open ? 'Close menu' : 'Open menu'} aria-expanded={open} aria-controls="mnav" onClick={() => setOpen(!open)}><span /><span /><span /></button>
       </div>
@@ -425,5 +466,22 @@ const Footer = () => (
 )
 
 export default function App() {
-  return (<><Water /><Header /><main><Analyzer /><How /><Safety /><Learn /></main><Footer /></>)
+  // Water ripple: buttons and nav links send a ring out from where you press.
+  useEffect(() => {
+    if (reduced()) return undefined
+    const down = (e) => {
+      const t = e.target.closest?.('.btn, .chip, .top nav a, .sizes button')
+      if (!t || t.disabled) return
+      const r = t.getBoundingClientRect()
+      const d = Math.max(r.width, r.height) * 2
+      const s = document.createElement('span')
+      s.className = 'drop'
+      s.style.cssText = `width:${d}px;height:${d}px;left:${e.clientX - r.left - d / 2}px;top:${e.clientY - r.top - d / 2}px`
+      t.appendChild(s)
+      setTimeout(() => s.remove(), 700)
+    }
+    document.addEventListener('pointerdown', down)
+    return () => document.removeEventListener('pointerdown', down)
+  }, [])
+  return (<><Splash /><Water /><Header /><main><Analyzer /><How /><Safety /><Learn /></main><Footer /></>)
 }
